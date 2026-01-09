@@ -1,0 +1,9 @@
+{
+  "diagnostics": {
+    "disable": [ "access-invisible" ],
+    "globals": [ "vim" ],
+    "runtime": {
+      "version": "Lua5.1"
+    }
+  }
+}
