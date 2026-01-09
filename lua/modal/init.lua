@@ -1,0 +1,28 @@
+----------------------------------------------------------------------------------------------------
+-- 自定义模式(即时自定义处理输入按键序列)
+-- local utils = require("core.utils")
+return require("modal.modal")
+
+----------------------------------------------------------------------------------------------------
+-- local function load_modal_options()
+-- 	local custom_modal = {
+-- 		"core.modal.modal-b",
+-- 		"core.modal.modal-e",
+-- 		"core.modal.modal-q",
+-- 	}
+-- 	local modal_options = {}
+-- 	for _k, v in ipairs(custom_modal) do
+-- 		local status, modal_option = utils.require(v)
+-- 		if status and "table" == type(modal_option) then
+-- 			if "function" == type(modal_option) then
+-- 				modal_option = modal_option(modal)
+-- 			end
+-- 		end
+-- 		table.insert(modal_options, modal_option)
+-- 	end
+-- 	return modal_options
+-- end
+--
+----------------------------------------------------------------------------------------------------
+-- return modal:registry(utils.unpack(load_modal_options()))
+----------------------------------------------------------------------------------------------------
