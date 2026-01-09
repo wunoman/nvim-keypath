@@ -1,6 +1,6 @@
 ----------------------------------------------------------------------------------------------------
 -- 自定义模式(即时自定义处理输入按键序列)
-return require("modal")
+return require("keypath")
 -- local utils = require("core.utils")
 -- local modal = require("modal.modal")
 --
