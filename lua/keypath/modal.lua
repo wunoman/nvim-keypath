@@ -1,6 +1,6 @@
 ----------------------------------------------------------------------------------------------------
-local utils = require("utils")
-local floatwin = require("floatwin")
+local utils = require("keypath.utils")
+local floatwin = require("keypath.floatwin")
 ----------------------------------------------------------------------------------------------------
 ---@alias On_key fun(self:ModalOption, modal:Modal, Key:string, Typed:string):HandleResult
 ---@alias On_registry fun(self:ModalOption, modal:Modal):void
