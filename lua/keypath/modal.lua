@@ -6,6 +6,7 @@ local floatwin = require("keypath.floatwin")
 ---@alias On_registry fun(self:ModalOption, modal:Modal):void
 ---@alias Show_which_key fun(modal:Modal, state:ModalState, self:ModalOption):table
 ---@alias Handle_key_typed fun(self, custom_modal:ModalOption, key:string, typed:string, v:ModalHandler?):HandleResult
+---@alias GenerateModalOption fun(modal:Modal):ModalOption?
 ---
 ---@alias ModalState table{ [string]:ModalHandler, handler:Handle_key_typed? }
 ---
@@ -22,6 +23,7 @@ local floatwin = require("keypath.floatwin")
 ---@field on_key On_key? @完全自助处理按键事件
 ---@field current_state table|? @指定当前的按键处理组,一个自定义模式下可能有多个 ModalState
 ---@field show_which_key Show_which_key|? @显示提示的浮动窗口
+---@field _enter function|? @内置函数
 ---
 ---@class ModalHandler
 ---@field desc string @功能描述
@@ -38,7 +40,7 @@ local floatwin = require("keypath.floatwin")
 ---@field floatwin table @浮动提示窗口
 ---@field inventory table @注册表 modal_name=ModalOption
 ---@field set_modal fun(self, new_modal:string):void @切换到指定模式
----@field registry fun(self, ...:ModalOption):Modal @注册模式
+---@field registry fun(self, ...:ModalOption|string):Modal @注册模式
 ---@field feed_native_key fun(self, key:string, count:number?):number @把按键加入输入序列并且模式不处理这些按键,直接发给nvim
 ---@field feed_native_cmd_key fun(self, key:string):number @与feed_native_key不同,这里只把输入做为一个字符略过
 ---@field dispatch fun(self, key:string, typed:string):string? @核心分发逻辑：根据「模式+条件+按键」执行不同行为
@@ -65,7 +67,9 @@ local floatwin = require("keypath.floatwin")
 ---@field handle_key_typed fun(self, custom_modal:ModalOption, key:string, typed:string, v:ModalHandler?):HandleResult
 ---@field root_modal_handle_key_typed fun(self, custom_modal:ModalOption, key:string, typed:string, v:ModalHandler?):HandleResult
 ---@field get_root_modal fun(self, mode:string|table, lhs:string, opt:table?):ModalOption
----@field show_floatwin fun(self, hints:table)
+---@field show_floatwin fun(self, hints:table) @显示浮动窗口,配合floatwin_visible
+---@field load_modal_option fun(self, script_path:string):ModalOption? @加载ModalOption
+---@field create_custom_modal_enter fun(self, current_modal:ModalOption) @生成一个进入自定义模式的函数
 ---
 ----------------------------------------------------------------------------------------------------
 ---@class DefaultOptions
@@ -455,17 +459,31 @@ function M:get_modal_current_state(name)
 end
 
 ----------------------------------------------------------------------------------------------------
+function M:create_custom_modal_enter(modal_option)
+  modal_option["_enter"] = function()
+    self:set_modal(modal_option.name) -- 进入自定义模式
+    self:switch_state(modal_option.state)
+  end
+end
+
+----------------------------------------------------------------------------------------------------
+function M:load_modal_option(script_path)
+  local status, modal_option = utils.require(script_path)
+  if status and modal_option and "function" == type(modal_option) then
+    ---@diagnostic disable-next-line
+    modal_option = modal_option(self)
+  end
+  return "table" == type(modal_option) and modal_option or nil
+end
+
+----------------------------------------------------------------------------------------------------
 function M:registry(...)
   local self = self
   local list = {}
-  for _, modal_option in ipairs({ ... }) do -- 全部转化成table形式
+  for _, item in ipairs({ ... }) do -- 全部转化成table形式
+    local modal_option = "string" == type(item) and self:load_modal_option(item) or item
     if "table" == type(modal_option) then
       table.insert(list, modal_option)
-    elseif "function" == type(modal_option) then
-      local xopt = modal_option(self)
-      if "table" == type(xopt) then
-        table.insert(list, xopt)
-      end
     end
   end
   -- 添加至仓库,执行启动按键映射和初始化配置
@@ -479,10 +497,7 @@ function M:registry(...)
       -- 在这里完成触发键的映射和初始化状态
       local km = modal_option.keymap
       local mode, lhs, opts = km[1], km[2], km[3]
-      modal_option["_enter"] = function()
-        self:set_modal(modal_option.name) -- 进入自定义模式
-        self:switch_state(modal_option.state)
-      end
+      self:create_custom_modal_enter(modal_option)
       vim.keymap.set(mode, lhs, modal_option["_enter"], opts)
     end
   end
@@ -525,10 +540,7 @@ function M:root_modal_handle_key_typed(_custom_modal, key, typed, _handler)
         -- _enter是内部生成的,查看 registry 函数
         -- 如果没有则再生成一个
         if "function" ~= type(modal_option["_enter"]) then
-          modal_option["_enter"] = function()
-            self:set_modal(modal_option.name) -- 进入自定义模式
-            self:switch_state(modal_option.state) -- 切换至响应配置
-          end
+          self:create_custom_modal_enter(modal_option)
         end
         -- 无须每次都创建一个进入模式的函数
         vim.defer_fn(modal_option["_enter"], self.options.enter_defer_time)
@@ -581,7 +593,8 @@ end
 
 ----------------------------------------------------------------------------------------------------
 function M:get_status_component()
-  local status, modal = utils.require("core.modal")
+  -- local status, modal = utils.require("core.modal")
+  local status, modal = utils.require("nvim-keypath")
   return {
     -- 自定义mode,名称需要用:开头
     function()
