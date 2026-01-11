@@ -221,6 +221,10 @@ keypath
   :registry("core.modal.modal-b", "core.modal.modal-e", "core.modal.modal-q") 
 ```
 
+## event
+- switch_state 第一个参数是keypath插件本向，第二个参数是进行的ModalState（如果是进入的话，否则是nil）
+
+
 ## 历史
 - 20260101 建立
 

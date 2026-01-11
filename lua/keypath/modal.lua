@@ -667,15 +667,17 @@ function M:simulate_keypath(keypath, hide_floatwin)
   if "string" ~= type(keypath) or string.len(keypath) == 0 then
     return
   end
-  local temp = self.options.floatwin_visible
+  local original_floatwin_visible = self.options.floatwin_visible
   self.options.floatwin_visible = not (hide_floatwin == nil or hide_floatwin == true)
-  -- print(self.options.floatwin_visible, temp)
+  -- print(self.options.floatwin_visible, original_floatwin_visible)
   local keycode = vim.api.nvim_replace_termcodes(keypath, true, false, true)
   vim.api.nvim_feedkeys(keycode, self.options.simulate_mode, false)
   -- 恢复浮动窗口可视设置
-  vim.defer_fn(function()
-    self.options.floatwin_visible = temp
-  end, self.options.floatwin_visible_recover_time)
+  if self.options.floatwin_visible ~= original_floatwin_visible then
+    vim.defer_fn(function()
+      self.options.floatwin_visible = original_floatwin_visible
+    end, self.options.floatwin_visible_recover_time)
+  end
 end
 
 ----------------------------------------------------------------------------------------------------
