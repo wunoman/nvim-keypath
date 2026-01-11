@@ -8,22 +8,24 @@
 这个插件设计极大的丰富了按键映射，可以减少原先大量依靠shift、alt、ctrl的组合按键，一是这些按键太远不容易按，另一个是数量相对有限。采取按键序列（称为keypath）可以解决这两个问题，如果不算起始的<leader>键，后续接3个键即可有了一万多个映射可供使用，而且这些按键没有限制等待时间，过程会有提供下一级键及其功能描述，少量记忆即可开始使用，熟练后过程丝滑快捷，任何想要的功能都可以设置一个keypath。
 
 ## 安装
-lazy
+lazy.nvim
 ```
 return {
   "wunoman/nvim-keypath",
-  opts = {},
-  config = function(_pluginconf, opts)
+  opts = {
+    options = { ... 写上你的自定义配置 ... },
+  },
+  config = function(pluginconf, opts)
     local keypath = require("nvim-keypath")
-    local modal_options = load_modal_options(keypath)
-    return keypath:setup(_pluginconf.conf, opts):registry(你的自定义模式描述ModalOption...)
+    return keypath:setup(pluginconf, opts):registry(
+      你的自定义模式描述ModalOption或是各个能生成ModalOption的脚本路径...)
   end,
 }
 ```
 
 ## 特性
 1. 通过按键序列映射到功能指令
-2. 可以在序列中上下级浏览
+2. 可以在序列中上下级浏览（如果有提供相应的ModalHandle配置的话）
 3. 即时浮动窗口提示下一级按键和描述
 4. 允许循环执行
 5. 退出模式快捷
@@ -165,6 +167,18 @@ keypath
           return modal.handle_result.leavemodal
         end
       end,
+      option = { keep = true },
+    },
+```
+如果使用condition则可改写成，如果条件不满足则h这一级不会显示有提示窗口中。因为使用了返回值discarded则当前输入被从输入序列中移除，相当于没有任何输入，并且不会离开当前模式，这时候再按下h键，则再按一遍相同的指令，即是代码里描述的显示前一个buffer。
+```
+    h = {
+      desc = "buffer prev",
+      handle = function()
+          buffer_commands.cycle(-1)
+          return modal.handle_result.discarded
+      end,
+      condition = "table" == type(buffer_commands)
       option = { keep = true },
     },
 ```
