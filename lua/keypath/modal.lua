@@ -86,6 +86,7 @@ local floatwin = require("keypath.floatwin")
 ---@field keymap table
 ---@field timeout table
 ---@field enter_defer_time number
+---@field floatwin_visible_recover_time number
 
 ----------------------------------------------------------------------------------------------------
 ---@type Modal
@@ -151,6 +152,8 @@ local M = {
     event = {
       -- show_which_key
     },
+    -- 在simulate时恢复floatwin_visible设置的延迟时间
+    floatwin_visible_recover_time = 50,
   },
 
   ----------------------------------------------------------------------------------------------------
@@ -668,7 +671,9 @@ function M:simulate_keypath(keypath, hide_floatwin)
   local keycode = vim.api.nvim_replace_termcodes(keypath, true, false, true)
   vim.api.nvim_feedkeys(keycode, self.options.simulate_mode, false)
   -- 恢复浮动窗口可视设置
-  self.options.floatwin_visible = temp
+  vim.defer_fn(function()
+    self.options.floatwin_visible = temp
+  end, self.options.floatwin_visible_recover_time)
 end
 
 ----------------------------------------------------------------------------------------------------
