@@ -153,7 +153,7 @@ local M = {
       -- show_which_key
     },
     -- 在simulate时恢复floatwin_visible设置的延迟时间
-    floatwin_visible_recover_time = 500,
+    floatwin_visible_recover_time = 1000,
   },
 
   ----------------------------------------------------------------------------------------------------
@@ -668,6 +668,7 @@ function M:simulate_keypath(keypath, hide_floatwin)
   end
   local temp = self.options.floatwin_visible
   self.options.floatwin_visible = not (hide_floatwin == nil or hide_floatwin == true)
+  print(self.options.floatwin_visible, temp)
   local keycode = vim.api.nvim_replace_termcodes(keypath, true, false, true)
   vim.api.nvim_feedkeys(keycode, self.options.simulate_mode, false)
   -- 恢复浮动窗口可视设置
