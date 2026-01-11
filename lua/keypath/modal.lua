@@ -117,6 +117,8 @@ local M = {
     active = true,
     -- 控制浮动窗口是否可见
     floatwin_visible = true,
+    -- 在simulate时恢复floatwin_visible设置的延迟时间
+    floatwin_visible_recover_time = 1000,
     -- 退出模式后切换回的缺少mode
     default_mode = "normal",
     -- 状态栏上组件的字体颜色
@@ -152,8 +154,6 @@ local M = {
     event = {
       -- show_which_key
     },
-    -- 在simulate时恢复floatwin_visible设置的延迟时间
-    floatwin_visible_recover_time = 1000,
   },
 
   ----------------------------------------------------------------------------------------------------
