@@ -130,7 +130,7 @@ local M = {
       -- condition
       color = function()
         return {
-          fg = "#957CC6", -- #7f1184 #6f51a1 #ee82ee #ffd700 #fe4000 #ee2c2c
+          fg = "#957CC6",
         }
       end,
     },
@@ -149,7 +149,7 @@ local M = {
     -- 模拟按键序列时的模式，m表示继续触发映射
     simulate_mode = "m",
     -- 退出模式的固定按键,要保证它不会被应用到按键路径中
-    leave_mode_key = ";",
+    leave_modal_key = ";",
     -- 一些自定义的函数
     event = {
       -- show_which_key
