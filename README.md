@@ -1,5 +1,7 @@
 # nvim-keypath
 
+![](images/0001.png)
+
 ## 概述
 这是一个neovim插件，用于辅助做好按键映射，但与传统的按键映射不同，采用的是接管输入按键，然后对按键输入做分析，分发给各个自定义的模式（这里使用了象windows显示对话框一样的概念即modal模式，意义是这些模式会接管输入），由各个模式做状态记录和触发最终的指令，达到和传统按键映射一样的功能。从第一个输入按键到触发具体指令，整个输入序列非常类似于文件系统的目录树结构，每个按键都做路径选择直到最终叶子（指令）。
 
@@ -19,6 +21,14 @@ return {
 }
 ```
 
+## 特性
+1. 通过按键序列映射到功能指令
+2. 可以在序列中上下级浏览
+3. 即时浮动窗口提示下一级按键和描述
+4. 允许循环执行
+5. 退出模式快捷
+6. 设置简单可自由度
+
 ## 简要举例
 先举几个简单例子，如果<leader>是逗号（这是我的习惯你也可以绑定其他的）：
 |keypath|功能|
@@ -28,16 +38,13 @@ return {
 |,epp|拷贝当前bufferline的路径到剪切板,并在nvim-tree在find到这个文件|
 |,qa|完成:qa退出neovim|
 
-## 特性
-1. 通过按键序列映射到功能指令
-2. 可以在序列中上下级浏览
-3. 即时浮动窗口提示下一级按键和描述
-4. 允许循环执行
-5. 退出模式快捷
-6. 设置简单可自由度
-
 ## 自定义模式举例
 格式要求，返回一个满足格式要求的ModalOption table，或是生成这个一样table的函数，函数的参数就是keypath插件本身
+1. 生成一些你自定义的模式ModalOption
+2. 通过keypath的registry把这些ModalOption注册到keypath中
+3. 通过使用ModalOption配置的按键映射启动相应的ModalOption
+4. 按下ModalOption的state里列出的按键触发相应的功能,包括继续走到下一级或是到达最终功能
+5. 按下任何非当前一级里注册的按键退出模式,回到原来的neovim的模式
 
 #### ModalOption
 ```
@@ -160,6 +167,44 @@ keypath
       end,
       option = { keep = true },
     },
+```
+
+## 与 lualine 结合显示当前的状态
+
+在配置 lualine 时把 keypath 的 component 添加到 lualine_b 中，使用 keypath 的get_status_component() 返回 component 配置
+```
+    local lualine_b = {
+      "branch",
+      "diff",
+      "diagnostics",
+    }
+    local status_keypath, keypath = utils.require("nvim-keypath")
+    if status_keypath and keypath then
+      ---@diagnostic disable-next-line
+      table.insert(lualine_b, 1, keypath:get_status_component())
+    end
+```
+
+在 options 在配置响应切换事件，实现快速启动 lualine 刷新
+
+```
+local keypath = require("nvim-keypath")
+local utils = require("core.utils")
+keypath
+  :setup(configure, {
+    options = {
+      event = {
+        switch_state = function(_keypath, _state)
+          -- 立即更新状态栏
+          local status_lualine, lualine = utils.require("lualine")
+          if status_lualine and "table" == type(lualine) then
+            lualine.refresh()
+          end
+        end,
+      },
+    },
+  })
+  :registry("core.modal.modal-b", "core.modal.modal-e", "core.modal.modal-q") 
 ```
 
 ## 历史
