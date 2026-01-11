@@ -118,7 +118,7 @@ local M = {
     -- 控制浮动窗口是否可见
     floatwin_visible = true,
     -- 在simulate时恢复floatwin_visible设置的延迟时间
-    floatwin_visible_recover_time = 1000,
+    floatwin_visible_recover_time = 50,
     -- 退出模式后切换回的缺少mode
     default_mode = "normal",
     -- 状态栏上组件的字体颜色
@@ -617,7 +617,8 @@ function M:root_modal_handle_key_typed(_custom_modal, key, typed, _handler)
         -- 无须每次都创建一个进入模式的函数
         vim.defer_fn(modal_option["_enter"], self.options.enter_defer_time)
       else
-        handle = self.handle_result.bypassandleave -- 让当前无效的输入放到序列中继续生效
+        -- handle = self.handle_result.bypassandleave -- 让当前无效的输入放到序列中继续生效
+        handle = self.handle_result.leavemodal -- 继续生效虽然能快一点但也造成困惑，还是统一较好
       end
     end
   end
@@ -668,7 +669,7 @@ function M:simulate_keypath(keypath, hide_floatwin)
   end
   local temp = self.options.floatwin_visible
   self.options.floatwin_visible = not (hide_floatwin == nil or hide_floatwin == true)
-  print(self.options.floatwin_visible, temp)
+  -- print(self.options.floatwin_visible, temp)
   local keycode = vim.api.nvim_replace_termcodes(keypath, true, false, true)
   vim.api.nvim_feedkeys(keycode, self.options.simulate_mode, false)
   -- 恢复浮动窗口可视设置
