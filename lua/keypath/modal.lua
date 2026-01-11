@@ -153,7 +153,7 @@ local M = {
       -- show_which_key
     },
     -- 在simulate时恢复floatwin_visible设置的延迟时间
-    floatwin_visible_recover_time = 100,
+    floatwin_visible_recover_time = 500,
   },
 
   ----------------------------------------------------------------------------------------------------
