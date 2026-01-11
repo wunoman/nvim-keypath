@@ -54,7 +54,6 @@ local floatwin = require("keypath.floatwin")
 ---@field show_which_key fun(self, state:ModalState):table @判断当前是否在某个自定义模式中
 ---@field switch_state fun(self, state:ModalState) @某个自定义模式中切换下一次接受的按键
 ---@field status_component_condition fun(self):bool @状态栏组件有效的判断函数
----@field get_status_component fun(self):table @状态栏组件配置
 ---@field parse_condition fun(self, item:table, custom_modal:ModalOption, state:table, key:string):bool
 ---@field put_inventory fun(self, name:string, custom_modal:ModalOption)
 ---@field get_inventory fun(self, name:string):ModalOption?
@@ -70,6 +69,13 @@ local floatwin = require("keypath.floatwin")
 ---@field show_floatwin fun(self, hints:table) @显示浮动窗口,配合floatwin_visible
 ---@field load_modal_option fun(self, script_path:string):ModalOption? @加载ModalOption
 ---@field create_custom_modal_enter fun(self, current_modal:ModalOption) @生成一个进入自定义模式的函数
+---@field simulate_keypath fun(self, keypath:string, hide_floatwin:boolean?) @模拟按键序列调用自定义模式中handle
+---@field get_status_component_content fun():function
+---@field get_status_component_condition fun():function
+---@field get_status_component_color fun():function
+---@field get_status_component fun():table
+---@field force_show_floatwin fun(self)
+---@field trigger_event fun(self, event_name:string, ...)
 ---
 ----------------------------------------------------------------------------------------------------
 ---@class DefaultOptions
@@ -84,7 +90,9 @@ local floatwin = require("keypath.floatwin")
 ----------------------------------------------------------------------------------------------------
 ---@type Modal
 local M = {
-  options = {},
+  options = {
+    status_component = {}, -- 未配置前也需要存在
+  },
   is_active = false,
   current_modal = "normal",
   inventory = {},
@@ -112,7 +120,16 @@ local M = {
     default_mode = "normal",
     -- 状态栏上组件的字体颜色
     status_component = {
-      fg = "#ee82ee", -- #ffd700 #fe4000 #ee2c2c
+      -- 状态栏组件默认的图标字符
+      status_icon = " ",
+      -- 状态栏组件内容函数
+      -- content
+      -- condition
+      color = function()
+        return {
+          fg = "#957CC6", -- #7f1184 #6f51a1 #ee82ee #ffd700 #fe4000 #ee2c2c
+        }
+      end,
     },
     -- 触发默认模式的按键
     keymap = { mode = { "n", "v" }, lhs = "<leader>", opt = { desc = "modal help" } },
@@ -126,6 +143,14 @@ local M = {
     },
     -- 从默认模式进入注册模式时的延迟时间ms
     enter_defer_time = 50,
+    -- 模拟按键序列时的模式，m表示继续触发映射
+    simulate_mode = "m",
+    -- 退出模式的固定按键,要保证它不会被应用到按键路径中
+    leave_mode_key = ";",
+    -- 一些自定义的函数
+    event = {
+      -- show_which_key
+    },
   },
 
   ----------------------------------------------------------------------------------------------------
@@ -177,7 +202,12 @@ function M:dispatch_state(custom_modal, key, typed)
     local handler = state[wk]
     if handler then
       -- 从state找到触发按键对应的处理配置
-      handle = self:handle_key_typed(custom_modal, key, typed, handler) -- local global func
+      -- local cond = self:parse_condition(handler, custom_modal, state, wk)
+      if handler.condition_result then
+        handle = self:handle_key_typed(custom_modal, key, typed, handler) -- local global func
+      else
+        handle = self.handle_result.leavemodal -- leave when no v
+      end
     elseif "function" == type(state.handle_key_typed) then
       -- 允许state有一个全局的处理配置
       handle = state.handle_key_typed(self, custom_modal, key, typed, handler)
@@ -282,35 +312,44 @@ function M:show_which_key(state)
       local custom_modal = self:get_inventory(self.current_modal)
       if custom_modal then
         for k, v in pairs(state) do
-          local cond = self:parse_condition(v, custom_modal, state, k)
-          if cond then
-            local line = { tostring(k), " " }
-            if vim.tbl_get(v, "option", "keep") == true then
-              table.insert(line, "*") -- 继续留在模式中
+          if v.condition_result then
+            local hintline
+            if "function" == type(self.options.event.show_which_key) then
+              hintline = self.options.event.show_which_key(custom_modal, self, state, k, v)
             else
-              table.insert(line, " ") -- 继续留在模式中
+              local line = { tostring(k), " " }
+              if vim.tbl_get(v, "option", "keep") == true then
+                table.insert(line, "*") -- 继续留在模式中
+              else
+                table.insert(line, " ") -- 继续留在模式中
+              end
+              table.insert(line, ":")
+              if "table" == type(v.state) then
+                table.insert(line, "+") -- 表示达到另一个state
+              else
+                table.insert(line, " ") -- 普通路径
+              end
+              table.insert(line, " ")
+              if "function" == type(v.desc) then
+                table.insert(line, tostring(v.desc(custom_modal, self, state, k, v) or ""))
+              elseif "string" == type(v.desc) then
+                table.insert(line, tostring(v.desc or ""))
+              else
+                table.insert(line, "")
+              end
+              hintline = table.concat(line)
             end
-            table.insert(line, ":")
-            if "table" == type(v.state) then
-              table.insert(line, "+") -- 表示达到另一个state
-            else
-              table.insert(line, " ") -- 普通路径
+            if "string" == type(hintline) then
+              table.insert(hints, hintline)
             end
-            table.insert(line, " ")
-            if "function" == type(v.desc) then
-              table.insert(line, tostring(v.desc(custom_modal, self, state, k) or ""))
-            elseif "string" == type(v.desc) then
-              table.insert(line, tostring(v.desc or ""))
-            else
-              table.insert(line, "")
-            end
-            local hintline = table.concat(line)
-            table.insert(hints, hintline)
           end
         end
       end
       table.sort(hints)
     end
+  end
+  if #hints == 0 then
+    table.insert(hints, "---empty---")
   end
   return { hints = hints }
 end
@@ -352,8 +391,14 @@ function M:set_modal(new_modal)
     -- 如果退出自定义模式则关闭浮动提示窗口
     self:set_timeout(true) -- true mean recover
     self.floatwin:close()
+    self:trigger_event("switch_state", nil)
   end
   --vim.notify(string.format("切换到 [%s] 模式", new_modal), vim.log.levels.INFO)
+end
+
+----------------------------------------------------------------------------------------------------
+function M:force_show_floatwin()
+  self.options.floatwin_visible = true
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -372,6 +417,14 @@ function M:switch_state(state)
     local custom_modal = self:get_inventory(self.current_modal)
     if custom_modal then
       custom_modal.current_state = state
+
+      -- 切换时把先决条件也计算好
+      for key, handler in pairs(state) do
+        if string.len(key) == 1 and "table" == type(handler) then
+          handler.condition_result = self:parse_condition(handler, custom_modal, state, key)
+        end
+      end
+
       if "function" == type(custom_modal.show_which_key) then
         -- 默认的模式提供了这样的函数,用于展示其他注册的模式
         local which_key_hint_info =
@@ -386,6 +439,17 @@ function M:switch_state(state)
         self:show_floatwin(which_key_hint_info.hints)
       end
     end
+
+    self:trigger_event("switch_state", state)
+  else
+    self:trigger_event("switch_state", nil)
+  end
+end
+
+function M:trigger_event(event_name, ...)
+  local callback = self.options.event[event_name]
+  if "function" == type(callback) then
+    callback(self, ...)
   end
 end
 
@@ -520,9 +584,14 @@ function M:get_default_options()
 end
 
 ----------------------------------------------------------------------------------------------------
-function M:configure(_conf, opt)
-  local options = ("table" == type(opt) and "table" == type(opt.options)) and opt.options or {}
-  self.options = vim.tbl_deep_extend("force", self.default_options, options or {})
+function M:configure(_configure, opts)
+  local opt = ("table" == type(opts) and "table" == type(opts.options)) and opts.options
+  self.options = vim.tbl_deep_extend(
+    "force",
+    self.default_options,
+    "table" == type(self.options) and self.options or {},
+    "table" == type(opt) and opt or {}
+  )
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -581,35 +650,114 @@ function M:setup(configure, opt)
   self:registry_default_custom()
 
   if self.options.active == true or self.options.active == nil then
-    self:active() -- 开启按键监听
+    -- 默认是立即开始按键监听
+    self:active()
   end
   return self
 end
 
 ----------------------------------------------------------------------------------------------------
-function M:status_component_condition()
-  return not not (self:is_custom_modal() and (vim.o.columns > 100))
+function M:simulate_keypath(keypath, hide_floatwin)
+  -- 默认关闭浮动提示窗口的显示,因为模拟按键序列非常快,实际效果是闪烁,无法正常观看
+  -- 如果最终指令不是退出模式,则要设置可视,不然与实际情况不符
+  if "string" ~= type(keypath) or string.len(keypath) == 0 then
+    return
+  end
+  local temp = self.options.show_floatwin
+  self.options.floatwin_visible = not (hide_floatwin == nil or hide_floatwin == true)
+  local keycode = vim.api.nvim_replace_termcodes(keypath, true, false, true)
+  vim.api.nvim_feedkeys(keycode, self.options.simulate_mode, false)
+  -- 恢复浮动窗口可视设置
+  self.options.floatwin_visible = temp
 end
 
 ----------------------------------------------------------------------------------------------------
-function M:get_status_component()
-  -- local status, modal = utils.require("core.modal")
+function M.get_status_component_content()
   local status, modal = utils.require("nvim-keypath")
+  if status and "table" == type(modal) then
+    local func = modal.options.status_component and modal.options.status_component.content
+    if "function" ~= type(func) then
+      func = function()
+        local icon = modal.options.status_component.status_icon
+        if "string" ~= type(icon) then
+          icon = ""
+        end
+        return modal:is_custom_modal() and (icon .. modal.current_modal) or ""
+      end
+      modal.options.status_component.content = func
+    end
+    return func
+  else
+    return function()
+      return ""
+    end
+  end
+end
+
+----------------------------------------------------------------------------------------------------
+function M.get_status_component_condition()
+  local status, modal = utils.require("nvim-keypath")
+  if status and "table" == type(modal) then
+    local func = modal.options.status_component and modal.options.status_component.condition
+    if "function" ~= type(func) then
+      func = function()
+        return not not (modal:is_custom_modal() and (vim.o.columns > 100))
+      end
+      modal.options.status_component.condition = func
+    end
+    return func
+  else
+    return function()
+      return false
+    end
+  end
+end
+
+----------------------------------------------------------------------------------------------------
+function M.get_status_component_color()
+  local status, modal = utils.require("nvim-keypath")
+  if status and "table" == type(modal) then
+    local func = modal.options.status_component.color
+    if "function" ~= type(func) then
+      func = function()
+        return { fg = "#ee82ee" }
+      end
+      modal.options.status_component.color = func
+    end
+    return func
+  else
+    return function()
+      return {}
+    end
+  end
+end
+
+----------------------------------------------------------------------------------------------------
+function M.get_status_component()
   return {
-    -- 自定义mode,名称需要用:开头
     function()
-      return (status and modal.is_custom_modal and modal:is_custom_modal())
-          and " " .. modal.current_modal
-        or ""
+      -- 由于nvim-keypath配置比较晚,这里都配置成函数调用的形式
+      -- 真正需要显示的时间才调用,这时候nvim-keypath应该配置完毕
+      local status, modal = utils.require("nvim-keypath")
+      if status and "table" == type(modal) then
+        return modal.get_status_component_content()()
+      end
+      return ""
     end,
     cond = function()
-      return status and modal.status_component_condition and modal:status_component_condition()
+      local status, modal = utils.require("nvim-keypath")
+      if status and "table" == type(modal) then
+        return modal.get_status_component_condition()()
+      end
+      return false
     end,
     color = function()
+      local status, modal = utils.require("nvim-keypath")
+      if status and "table" == type(modal) then
+        return modal.get_status_component_color()()
+      end
       return {
-        fg = (
-          (status and modal.options) and modal.options.status_component or self.default_options
-        ).fg,
+        fg = "#ee82ee",
       }
     end,
   }
