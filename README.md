@@ -3,11 +3,18 @@
 ![](images/0001.png)
 
 ## 概述
+This is a Neovim plugin designed to assist with key mapping, but unlike traditional key mapping, it works by intercepting input keystrokes, analyzing the key input, and distributing them to various custom modes (using a concept similar to Windows dialog boxes, referred to as "modal" modes, which take over the input). Each mode maintains its own state and triggers the final commands, achieving the same functionality as traditional key mapping. From the first input keystroke to triggering a specific command, the entire input sequence closely resembles the directory tree structure of a file system, where each keystroke navigates a path until reaching the final leaf node (the command).
+
+This plugin design greatly enriches key mapping and can reduce the reliance on numerous combinations involving Shift, Alt, and Ctrl keys—partly because these keys are often difficult to reach, and partly because their quantity is relatively limited. Adopting key sequences (referred to as "keypaths") addresses both issues. Excluding the initial <leader> key, just three subsequent keys can provide over ten thousand possible mappings. Moreover, there is no time limit for waiting between keystrokes, and hints for the next available keys and their functions are provided during the process. With minimal memorization, users can start using it right away, and once proficient, the workflow becomes smooth and efficient. Any desired function can be assigned a keypath.
+
+With nvim-keypath, achieve both mapping freedom and finger freedom.
+
 这是一个neovim插件，用于辅助做好按键映射，但与传统的按键映射不同，采用的是接管输入按键，然后对按键输入做分析，分发给各个自定义的模式（这里使用了象windows显示对话框一样的概念即modal模式，意义是这些模式会接管输入），由各个模式做状态记录和触发最终的指令，达到和传统按键映射一样的功能。从第一个输入按键到触发具体指令，整个输入序列非常类似于文件系统的目录树结构，每个按键都做路径选择直到最终叶子（指令）。
 
 这个插件设计极大的丰富了按键映射，可以减少原先大量依靠shift、alt、ctrl的组合按键，一是这些按键太远不容易按，另一个是数量相对有限。采取按键序列（称为keypath）可以解决这两个问题，如果不算起始的<leader>键，后续接3个键即可有了一万多个映射可供使用，而且这些按键没有限制等待时间，过程会有提供下一级键及其功能描述，少量记忆即可开始使用，熟练后过程丝滑快捷，任何想要的功能都可以设置一个keypath。
 
-使用nvim-keypath
+使用 nvim-keypath 实现映射键自由，也实现手指自由。
+
 ## 安装
 lazy.nvim
 ```
@@ -106,6 +113,7 @@ ModalState是由ModalHandler组成一个表
 
 
 #### 简单ModalOption例子
+core.modal.modal-q.lua
 ```
 ----------------------------------------------------------------------------------------------------
 local utils = require("core.utils")
@@ -155,16 +163,18 @@ end
 ```
 
 #### 注册自定义模式到keypath中
-这里的各个core.modal.modal-b，就是前面提到的可生成ModalOption的脚本
 ```
-local keypath = require("nvim-keypath")
-keypath
+require("nvim-keypath")
   :setup(configure, {})
-  :registry("core.modal.modal-b", "core.modal.modal-e", "core.modal.modal-q")
+  :registry("core.modal.modal-q")
 ```
 
 #### 循环执行的ModalHanle配置
 实现:bp，用的是bufferline的commands功能，到达路径后每按一个h都会执行，一直停留在自定义模式中直到有退出键被按下。如果条件不满足，这里没有使用condition，则是输出一个提示并退出模式。
+
+在ModalState中每个单个字符为键的值都称为ModalHandler，由它执行具体的功能或是走向下一级。
+
+如果是走向下一级，则给ModalHandler配置一个state属性即可，这个state又是一个ModalState类型的表
 ```
     h = {
       desc = "buffer prev",
@@ -193,7 +203,7 @@ keypath
     },
 ```
 
-## 与 lualine 结合显示当前的状态
+## 与 lualine 结合显示当前的自定义模式名称
 
 在配置 lualine 时把 keypath 的 component 添加到 lualine_b 中，使用 keypath 的get_status_component() 返回 component 配置
 ```
@@ -212,13 +222,13 @@ keypath
 在 options 在配置响应切换事件，实现快速启动 lualine 刷新
 
 ```
-local keypath = require("nvim-keypath")
 local utils = require("core.utils")
+local keypath = require("nvim-keypath")
 keypath
   :setup(configure, {
     options = {
       event = {
-        switch_state = function(_keypath, _state)
+        set_state = function(_keypath, _state)
           -- 立即更新状态栏
           local status_lualine, lualine = utils.require("lualine")
           if status_lualine and "table" == type(lualine) then
@@ -228,10 +238,13 @@ keypath
       },
     },
   })
-  :registry("core.modal.modal-b", "core.modal.modal-e", "core.modal.modal-q") 
+  :registry("core.modal.modal-q") 
 ```
 
-## event callback function
+## 事件回调函数
+
+允许实现更多的定制化功能
+
 - set_state 第一个参数是keypath插件本向，第二个参数是进行的ModalState（如果是进入的话，否则是nil）
   self:trigger_event("set_state", state)
 - show_which_key
