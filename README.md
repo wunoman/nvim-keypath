@@ -30,6 +30,7 @@ return {
 4. 允许循环执行
 5. 退出模式快捷
 6. 设置简单可自由度
+7. 默认开启可返回上一级模式,缺少按键是减号
 
 ## 简要举例
 先举几个简单例子，如果<leader>是逗号（这是我的习惯你也可以绑定其他的）：
@@ -221,9 +222,13 @@ keypath
   :registry("core.modal.modal-b", "core.modal.modal-e", "core.modal.modal-q") 
 ```
 
-## event
-- switch_state 第一个参数是keypath插件本向，第二个参数是进行的ModalState（如果是进入的话，否则是nil）
-
+## event callback function
+- set_state 第一个参数是keypath插件本向，第二个参数是进行的ModalState（如果是进入的话，否则是nil）
+  self:trigger_event("set_state", state)
+- show_which_key
+  hintline = self:trigger_event("show_which_key", self, custom_modal, state, k, v)
+- is_custom_modal
+  return not not self:trigger_event("is_custom_modal", modal_name)
 
 ## 历史
 - 20260101 建立

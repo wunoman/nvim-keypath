@@ -8,7 +8,7 @@ local floatwin = require("keypath.floatwin")
 ---@alias Handle_key_typed fun(self, custom_modal:ModalOption, key:string, typed:string, v:ModalHandler?):HandleResult
 ---@alias GenerateModalOption fun(modal:Modal):ModalOption?
 ---
----@alias ModalState table{ [string]:ModalHandler, handler:Handle_key_typed? }
+---@alias ModalState table{ [string]:ModalHandler, handler:Handle_key_typed?, _uplevel table|? }
 ---
 ---@class ModalHandlerRegistryKeymap
 ---@field [1] string|table @按键映射的模式 mode
@@ -33,9 +33,10 @@ local floatwin = require("keypath.floatwin")
 ---
 ---@class Modal
 ---@field options table @配置
----@field post_key_count number @需要略过的字符序列长度
+---@field bypass_key_count number @需要略过的字符序列长度
 ---@field is_active bool @是否开启处理输入序列
 ---@field current_modal string @当前自定义模式的名称
+---@field current_state table @当前ModalState
 ---@field handle_result table @自定义模式处理函数的返回值表
 ---@field floatwin table @浮动提示窗口
 ---@field inventory table @注册表 modal_name=ModalOption
@@ -44,25 +45,25 @@ local floatwin = require("keypath.floatwin")
 ---@field feed_native_key fun(self, key:string, count:number?):number @把按键加入输入序列并且模式不处理这些按键,直接发给nvim
 ---@field feed_native_cmd_key fun(self, key:string):number @与feed_native_key不同,这里只把输入做为一个字符略过
 ---@field dispatch fun(self, key:string, typed:string):string? @核心分发逻辑：根据「模式+条件+按键」执行不同行为
----@field dispatch_state fun(self, custom_modal:ModalOption, key:string, typed:string):HandleResult
+---@field dispatch_state fun(self, custom_modal:ModalOption, key:string, typed:string):HandleResult @由具体的ModalState处理按键
 ---@field active fun(self):self @设置标志开启处理输入序列
 ---@field deactive fun(self):void @关闭输入序列的处理
----@field is_custom_modal fun(self):bool @判断当前是否在某个自定义模式中
----@field setup fun(self, conf:table, opt:table?):self @判断当前是否在某个自定义模式中
----@field get_default_options fun(self):DefaultOptions @判断当前是否在某个自定义模式中
----@field default_options DefaultOptions @判断当前是否在某个自定义模式中
----@field show_which_key fun(self, state:ModalState):table @判断当前是否在某个自定义模式中
----@field switch_state fun(self, state:ModalState) @某个自定义模式中切换下一次接受的按键
+---@field is_custom_modal fun(self, modal_name:string?):bool @判断当前是否在某个自定义模式中
+---@field setup fun(self, conf:table, opt:table?):self @合并配置并且开启监听
+---@field get_default_options fun(self):DefaultOptions @返回默认配置
+---@field default_options DefaultOptions @默认配置
+---@field show_which_key fun(self, state:ModalState):table @返回ModalState的文本提示
+---@field set_state fun(self, state:ModalState) @某个自定义模式中切换下一次接受的按键
 ---@field status_component_condition fun(self):bool @状态栏组件有效的判断函数
----@field parse_condition fun(self, item:table, custom_modal:ModalOption, state:table, key:string):bool
----@field put_inventory fun(self, name:string, custom_modal:ModalOption)
----@field get_inventory fun(self, name:string):ModalOption?
+---@field parse_condition fun(self, handler:ModalHandler, custom_modal:ModalOption, state:table, key:string):bool
+---@field put_inventory fun(self, name:string, custom_modal:ModalOption) @注册自定义模式到仓库中
+---@field get_inventory fun(self, name:string):ModalOption? @返回已经注册的自定义模式
 ---@field get_modal_state fun(self, custom_modal_name:string):ModalState? @返回某个已注册的ModalOption的state
 ---@field get_modal_current_state fun(self, custom_modal_name:string):ModalState? @返回某个已注册的ModalOption的current_state
 ---@field set_timeout fun(self, recover:bool|nil):self @设置等待时间或是恢复初始设置
 ---@field show_all_custom_modal fun(self):table @显示仓库所有已经注册的模式
 ---@field configure fun(self, configure:table, opt:table|?) @合并选项
----@field registry_default_custom fun(self) @注册缺省的一个模式,这个模式用于展示所有已注册的模式
+---@field registry_root_modal fun(self) @注册缺省的一个模式,这个模式用于展示所有已注册的模式
 ---@field handle_key_typed fun(self, custom_modal:ModalOption, key:string, typed:string, v:ModalHandler?):HandleResult
 ---@field root_modal_handle_key_typed fun(self, custom_modal:ModalOption, key:string, typed:string, v:ModalHandler?):HandleResult
 ---@field get_root_modal fun(self, mode:string|table, lhs:string, opt:table?):ModalOption
@@ -70,13 +71,15 @@ local floatwin = require("keypath.floatwin")
 ---@field load_modal_option fun(self, script_path:string):ModalOption? @加载ModalOption
 ---@field create_custom_modal_enter fun(self, current_modal:ModalOption) @生成一个进入自定义模式的函数
 ---@field simulate_keypath fun(self, keypath:string, hide_floatwin:boolean?) @模拟按键序列调用自定义模式中handle
----@field get_status_component_content fun():function
----@field get_status_component_condition fun():function
----@field get_status_component_color fun():function
----@field get_status_component fun():table
----@field force_show_floatwin fun(self)
----@field trigger_event fun(self, event_name:string, ...)
----
+---@field get_status_component_content fun():function @状态栏组件配置的内容部分
+---@field get_status_component_condition fun():function @状态栏组件配置的条件部分
+---@field get_status_component_color fun():function @状态栏组件配置的颜色部分
+---@field get_status_component fun():table @返回状态栏组件配置表
+---@field force_show_floatwin fun(self) @强制设置floatwin的可视标志为真
+---@field trigger_event fun(self, event_name:string, ...):any @触发指定的回调函数并返回结果
+---@field get_key_hintline fun(self, custom_modal, state, k, v):string? @获得某个ModalHandler的提示文本
+---@field mark_uplevel fun(self, state:ModalState, uplevel:boolean?) @保存返回上级时返回的ModalOption和ModalState
+
 ----------------------------------------------------------------------------------------------------
 ---@class DefaultOptions
 ---@field NSID number @namespace id
@@ -87,17 +90,22 @@ local floatwin = require("keypath.floatwin")
 ---@field timeout table
 ---@field enter_defer_time number
 ---@field floatwin_visible_recover_time number
+---@field simulate_mode string
+---@field leave_modal_key string
+---@field event table
+---@field empty_placeholder string
+---@field uplevel table
 
 ----------------------------------------------------------------------------------------------------
 ---@type Modal
 local M = {
-  options = {
-    status_component = {}, -- 未配置前也需要存在
-  },
+  ---@diagnostic disable-next-line
+  version = "0.0.39",
   is_active = false,
   current_modal = "normal",
+  current_state = {},
   inventory = {},
-  post_key_count = 0, -- 需要在模式中忽略的字符数量(字符在输入序列中)
+  bypass_key_count = 0, -- 需要在模式中忽略的字符数量(字符在输入序列中)
   floatwin = floatwin,
   ---@enum HandleResult
   handle_result = {
@@ -107,8 +115,12 @@ local M = {
     feedandleave = 3,
     discarded = 4,
     bypassandleave = 5,
+    discardedandleave = 6,
   },
 
+  options = {
+    status_component = {}, -- 合并配置前也需要存在
+  },
   ---@type DefaultOptions
   default_options = {
     -- on_key的namspace id
@@ -153,15 +165,20 @@ local M = {
     -- 一些自定义的函数
     event = {
       -- show_which_key
+      -- set_state
+    },
+    empty_placeholder = "---empty---",
+    uplevel = {
+      enable = true,
+      key = "-",
     },
   },
 
   ----------------------------------------------------------------------------------------------------
   dispatch = function(self, key, typed)
     local handle = self.handle_result.bypass
-    ---@diagnostic disable-next-line
-    if self.post_key_count > 0 then
-      self.post_key_count = self.post_key_count - 1 -- 略过指定数量的字符
+    if self.bypass_key_count > 0 then
+      self.bypass_key_count = self.bypass_key_count - 1 -- 略过指定数量的字符
     else
       -- 在模式中再添加到输入序列的字符不再按模式处理,略过这些字符
       local custom_modal = self:get_inventory(self.current_modal)
@@ -176,6 +193,7 @@ local M = {
           handle == self.handle_result.leavemodal
           or handle == self.handle_result.feedandleave
           or handle == self.handle_result.bypassandleave
+          or handle == self.handle_result.discardedandleave
         then
           self:set_modal(self.options.default_mode) --默认切回 normal 模式
         end
@@ -205,20 +223,28 @@ function M:dispatch_state(custom_modal, key, typed)
     local handler = state[wk]
     if handler then
       -- 从state找到触发按键对应的处理配置
-      -- local cond = self:parse_condition(handler, custom_modal, state, wk)
       if handler.condition_result then
         handle = self:handle_key_typed(custom_modal, key, typed, handler) -- local global func
       else
-        handle = self.handle_result.leavemodal -- leave when no v
+        handle = self.handle_result.leavemodal -- leave when condition do not meet
       end
     elseif "function" == type(state.handle_key_typed) then
-      -- 允许state有一个全局的处理配置
+      -- 允许state有一个全局的处理配置(root modal 里就是这么定义的)
       handle = state.handle_key_typed(self, custom_modal, key, typed, handler)
+    elseif self.options.uplevel.enable and self.options.uplevel.key == wk then
+      -- 允许返回上一级
+      local uplevel = self.current_state["_uplevel"] or {}
+      if "table" == type(uplevel.modal) and "table" == type(uplevel.state) then
+        uplevel.modal["_enter"](uplevel.state, true) -- #2 true 进入上一级模式
+        handle = self.handle_result.discarded
+      else
+        handle = self.handle_result.leavemodal -- leave when no uplevel
+      end
     else
       handle = self.handle_result.leavemodal -- leave when no handle
     end
   else
-    handle = self.handle_result.leavemodal -- leave when no v
+    handle = self.handle_result.leavemodal -- leave when no state
   end
   return handle
 end
@@ -231,7 +257,7 @@ function M:handle_key_typed(custom_modal, key, typed, handler)
   end
   local type_of_handle = type(handler.handle)
   if "function" == type_of_handle then -- 最优先处理
-    handle = handler.handle(custom_modal, self, key, typed)
+    handle = handler.handle(self, custom_modal, key, typed)
   elseif "string" == type_of_handle then
     -- 如果处理方法是个字符串则认为它是按键序列,并且配合option.keep来决定on_key返回值
     if vim.tbl_get(handler, "option", "keep") == true then -- 继续留在模式中
@@ -258,29 +284,34 @@ function M:handle_key_typed(custom_modal, key, typed, handler)
   elseif "table" == type(handler.state) then
     -- 切换至同一个 custom_modal 的内部 state
     -- custome_modal 保持不变
-    self:switch_state(handler.state)
-    handle = self.handle_result.discarded
+    -- self:set_state(handler.state)
+    -- handle = self.handle_result.discarded
     handler.handle = function() -- 统一改写成函数,下次就不再走这个路径
-      self:switch_state(handler.state)
-      handle = self.handle_result.discarded
+      -- self:set_state(handler.state)
+      ---@diagnostic disable-next-line
+      custom_modal["_enter"](handler.state)
+      return self.handle_result.discarded
     end
+    return handler.handle()
   end
   return handle
 end
 
 ----------------------------------------------------------------------------------------------------
-function M:parse_condition(item, custom_modal, state, k)
+function M:parse_condition(handler, custom_modal, state, k)
+  ---@diagnostic disable
   local cond = true
-  local type_of_condtion = type(item.condition)
+  local type_of_condtion = type(handler.condition)
   if "boolean" == type_of_condtion then -- 直接值
-    cond = item.condition
+    cond = handler.condition
   elseif "function" == type_of_condtion then -- 通过函数计算
-    cond = not not (item.condition(custom_modal, self, state, k))
+    cond = not not (handler.condition(self, custom_modal, state, k))
   elseif "nil" == type_of_condtion then -- 没有提供,默认为true
     cond = true
   else
-    cond = not not item.condition -- 转成boolan
+    cond = not not handler.condition -- 转成boolan
   end
+  ---@diagnostic enable
   return cond
 end
 
@@ -307,6 +338,32 @@ function M:show_all_custom_modal()
 end
 
 ----------------------------------------------------------------------------------------------------
+---@diagnostic disable: unused
+function M:get_key_hintline(custom_modal, state, k, v)
+  local line = { tostring(k), " " }
+  if vim.tbl_get(v, "option", "keep") == true then
+    table.insert(line, "*") -- 继续留在模式中
+  else
+    table.insert(line, " ") -- 继续留在模式中
+  end
+  table.insert(line, ":")
+  if "table" == type(v.state) then
+    table.insert(line, "+") -- 表示达到另一个state
+  else
+    table.insert(line, " ") -- 普通路径
+  end
+  table.insert(line, " ")
+  if "function" == type(v.desc) then
+    table.insert(line, tostring(v.desc(custom_modal, state, k, v) or ""))
+  elseif "string" == type(v.desc) then
+    table.insert(line, tostring(v.desc or ""))
+  else
+    table.insert(line, "")
+  end
+  return table.concat(line)
+end
+
+----------------------------------------------------------------------------------------------------
 function M:show_which_key(state)
   local hints = {}
   ---@diagnostic disable-next-line
@@ -317,30 +374,11 @@ function M:show_which_key(state)
         for k, v in pairs(state) do
           if v.condition_result then
             local hintline
+            -- 触发事件回调函数与默认函数的参数是一致
             if "function" == type(self.options.event.show_which_key) then
-              hintline = self.options.event.show_which_key(custom_modal, self, state, k, v)
+              hintline = self:trigger_event("show_which_key", self, custom_modal, state, k, v)
             else
-              local line = { tostring(k), " " }
-              if vim.tbl_get(v, "option", "keep") == true then
-                table.insert(line, "*") -- 继续留在模式中
-              else
-                table.insert(line, " ") -- 继续留在模式中
-              end
-              table.insert(line, ":")
-              if "table" == type(v.state) then
-                table.insert(line, "+") -- 表示达到另一个state
-              else
-                table.insert(line, " ") -- 普通路径
-              end
-              table.insert(line, " ")
-              if "function" == type(v.desc) then
-                table.insert(line, tostring(v.desc(custom_modal, self, state, k, v) or ""))
-              elseif "string" == type(v.desc) then
-                table.insert(line, tostring(v.desc or ""))
-              else
-                table.insert(line, "")
-              end
-              hintline = table.concat(line)
+              hintline = self:get_key_hintline(custom_modal, state, k, v)
             end
             if "string" == type(hintline) then
               table.insert(hints, hintline)
@@ -352,7 +390,7 @@ function M:show_which_key(state)
     end
   end
   if #hints == 0 then
-    table.insert(hints, "---empty---")
+    table.insert(hints, tostring(self.options.empty_placeholder))
   end
   return { hints = hints }
 end
@@ -383,23 +421,6 @@ function M:set_timeout(recover)
 end
 
 ----------------------------------------------------------------------------------------------------
-function M:set_modal(new_modal)
-  if not self.is_active then
-    return
-  end
-  self.current_modal = new_modal
-  if self:is_custom_modal() then
-    self:set_timeout()
-  else
-    -- 如果退出自定义模式则关闭浮动提示窗口
-    self:set_timeout(true) -- true mean recover
-    self.floatwin:close()
-    self:trigger_event("switch_state", nil)
-  end
-  --vim.notify(string.format("切换到 [%s] 模式", new_modal), vim.log.levels.INFO)
-end
-
-----------------------------------------------------------------------------------------------------
 function M:force_show_floatwin()
   self.options.floatwin_visible = true
 end
@@ -412,48 +433,80 @@ function M:show_floatwin(hints)
 end
 
 ----------------------------------------------------------------------------------------------------
-function M:switch_state(state)
+function M:set_modal(new_modal)
   if not self.is_active then
     return
   end
+  local enter_custom_modal = not self:is_custom_modal() and self:is_custom_modal(new_modal)
+  self.current_modal = new_modal
   if self:is_custom_modal() then
-    local custom_modal = self:get_inventory(self.current_modal)
-    if custom_modal then
-      custom_modal.current_state = state
-
-      -- 切换时把先决条件也计算好
-      for key, handler in pairs(state) do
-        if string.len(key) == 1 and "table" == type(handler) then
-          handler.condition_result = self:parse_condition(handler, custom_modal, state, key)
-        end
-      end
-
-      if "function" == type(custom_modal.show_which_key) then
-        -- 默认的模式提供了这样的函数,用于展示其他注册的模式
-        local which_key_hint_info =
-          custom_modal.show_which_key(self, custom_modal.state, custom_modal)
-        if "table" == type(which_key_hint_info) and not which_key_hint_info.abort then
-          if "table" == type(which_key_hint_info.hints) then
-            self:show_floatwin(which_key_hint_info.hints)
-          end
-        end
-      elseif "table" == type(state) then
-        local which_key_hint_info = self:show_which_key(state)
-        self:show_floatwin(which_key_hint_info.hints)
-      end
+    if enter_custom_modal then
+      -- 有可能在多个自定义模式中切换,当出现从普通模式切换到自定义模式时才需要设置超时限制
+      self:set_timeout()
     end
-
-    self:trigger_event("switch_state", state)
   else
-    self:trigger_event("switch_state", nil)
+    -- 如果退出自定义模式则关闭浮动提示窗口
+    self:set_timeout(true) -- true mean recover
+    self.floatwin:close()
+    self:trigger_event("set_state", nil)
+    self.current_state = nil -- 清空
   end
+  --vim.notify(string.format("切换到 [%s] 模式", new_modal), vim.log.levels.INFO)
 end
 
+----------------------------------------------------------------------------------------------------
+function M:set_state(state)
+  if not self.is_active then
+    return
+  end
+  if not self:is_custom_modal() then
+    -- 触发回调函数时,如果非自定义模式,则state参数为nil
+    self:trigger_event("set_state", nil)
+    return
+  end
+
+  local custom_modal = self:get_inventory(self.current_modal)
+
+  if not custom_modal then
+    return
+  end
+
+  self.current_state = state
+  custom_modal.current_state = state
+
+  -- 切换时把先决条件也计算好,每次进来的时候都计算一次,直到离开都以此时的计算值为准
+  -- 这样才能使得看到的提示与可操作的相一致,因为提示不会实时更新（即使后面条件能够被满足）
+  for key, handler in pairs(state) do
+    if string.len(key) == 1 and "table" == type(handler) then
+      -- key是单个字符的才算是ModalHandler
+      handler.condition_result = self:parse_condition(handler, custom_modal, state, key)
+    end
+  end
+
+  if "function" == type(custom_modal.show_which_key) then
+    -- root模式提供了这样的函数,用于展示其他注册的模式
+    local result = custom_modal.show_which_key(self, custom_modal.state, custom_modal)
+    if "table" == type(result) and "table" == type(result.hints) and not result.abort then
+      self:show_floatwin(result.hints)
+    end
+  else
+    local result = self:show_which_key(state)
+    if "table" == type(result) and "table" == type(result.hints) then
+      self:show_floatwin(result.hints)
+    end
+  end
+
+  self:trigger_event("set_state", state)
+end
+
+----------------------------------------------------------------------------------------------------
 function M:trigger_event(event_name, ...)
   local callback = self.options.event[event_name]
+  local result = {}
   if "function" == type(callback) then
-    callback(self, ...)
+    result = { callback(self, ...) }
   end
+  return utils.unpack(result)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -476,7 +529,7 @@ function M:deactive()
     if self:is_custom_modal() then
       self:set_modal(self.options.default_mode)
     end
-    vim.on_key(nil, self.options.NSID)
+    vim.on_key(nil, self.options.NSID) -- 取消on_key回调
     self.is_active = false
     self.floatwin:destroy()
   end
@@ -490,7 +543,7 @@ function M:feed_native_key(key, count)
   if "number" ~= type(keycode_length) then
     keycode_length = string.len(keycode)
   end
-  self.post_key_count = self.post_key_count + keycode_length
+  self.bypass_key_count = self.bypass_key_count + keycode_length
   return keycode_length
 end
 
@@ -501,7 +554,7 @@ function M:feed_native_cmd_key(key)
   vim.api.nvim_feedkeys(keycode, "n", false) -- 不等待按键完成，避免阻塞
   -- <cmd>xxx<cr> 只作为了一个(这是测试出来的数值)字符略过
   local keycode_length = 1
-  self.post_key_count = self.post_key_count + keycode_length
+  self.bypass_key_count = self.bypass_key_count + keycode_length
   return keycode_length
 end
 
@@ -526,10 +579,44 @@ function M:get_modal_current_state(name)
 end
 
 ----------------------------------------------------------------------------------------------------
+function M:mark_uplevel(state, uplevel)
+  if not self.options.uplevel.enable then -- 如果配置不启用这项功能则跳过
+    return
+  end
+  if "table" ~= type(state["_uplevel"]) then
+    state["_uplevel"] = {}
+  end
+  -- 未切换到新的state之前执行,保存返回点
+  if not uplevel then -- 如果是由uplevel触发的则跳过
+    if self:is_custom_modal() then -- 从上往下state==nil
+      local custom_modal = self:get_inventory(self.current_modal)
+      if custom_modal then -- 如果当前是自定义模式则保存以备后续uplevel
+        local _uplevel = state["_uplevel"]
+        _uplevel.modal = custom_modal
+        _uplevel.state = custom_modal.current_state
+      end
+    else
+      -- 这里比较特殊，因为有时候是由按键映射触发的，有时候是由root模式触发的
+      -- 由root触发的可以uplevel到root，如果不清空，则由按键映射触发的也可uplevel到root
+      -- 这与实际操作感觉上不一致，所以如果由按键映射触发的则清空它，它无法uplevel到root
+      state["_uplevel"].modal = nil
+      state["_uplevel"].state = nil
+    end
+  end
+end
+
+----------------------------------------------------------------------------------------------------
 function M:create_custom_modal_enter(modal_option)
-  modal_option["_enter"] = function()
+  if "function" == type(modal_option["_enter"]) then
+    return
+  end
+  modal_option["_enter"] = function(state, uplevel)
+    -- 由按键映射触发时state == nil
+    state = "table" == type(state) and state or modal_option.state
+    -- 返回上一级的时候 uplevel==true
+    self:mark_uplevel(state, uplevel) -- 先于切换前完成
     self:set_modal(modal_option.name) -- 进入自定义模式
-    self:switch_state(modal_option.state)
+    self:set_state(state)
   end
 end
 
@@ -558,7 +645,7 @@ function M:registry(...)
     self:put_inventory(modal_option.name, modal_option)
     if "function" == type(modal_option.on_registry) then
       -- 由自定义函数实现触发和初始化状态
-      modal_option.on_registry(modal_option, self)
+      modal_option.on_registry(self, modal_option)
     end
     if "table" == type(modal_option.keymap) then
       -- 在这里完成触发键的映射和初始化状态
@@ -572,12 +659,12 @@ function M:registry(...)
 end
 
 ----------------------------------------------------------------------------------------------------
-function M:is_custom_modal()
-  local checker = self.options.is_custom_modal
-  if "function" == type(checker) then
-    return not not (checker(self.current_modal))
+function M:is_custom_modal(modal_name)
+  modal_name = "string" == type(modal_name) and modal_name or self.current_modal
+  if "function" == type(self.options.event["is_custom_modal"]) then
+    return not not self:trigger_event("is_custom_modal", modal_name)
   else
-    return not not (string.find(self.current_modal, ":"))
+    return not not (string.find(modal_name, ":"))
   end
 end
 
@@ -600,25 +687,28 @@ end
 ----------------------------------------------------------------------------------------------------
 function M:root_modal_handle_key_typed(_custom_modal, key, typed, _handler)
   local handle = self.handle_result.leavemodal
-  for _, modal_option in pairs(self.inventory) do
-    if modal_option.keymap then
+  for _, custom_modal in pairs(self.inventory) do
+    if custom_modal.keymap then
       -- 形如<leader>加一个字符的解发键则允许在这个按键输入时触发模式切换
-      local lhs = tostring(modal_option.keymap[2])
+      local lhs = tostring(custom_modal.keymap[2])
       local onechar = string.match(lhs, "<leader>(.)")
       if onechar and (onechar == key or onechar == typed) then
+        -- 返回的handle都不离开自定义模式,使是追踪uplevel成为可能
+        -- 如果离开了root退回到非自定义模式再延迟触发其他自定义模式则uplevel无法追踪到root模式
+        -- 因为在自定义模式的_enter函数中会检测当前模式是否为自定义模式
         if onechar == "q" then -- 命中之后才判断是否是录制指令
           self:feed_native_key("<esc>") -- q是宏记录的开始,取消它,结束它的等待
+          handle = self.handle_result.feedkey
+        else
+          handle = self.handle_result.discarded
         end
-        -- _enter是内部生成的,查看 registry 函数
-        -- 如果没有则再生成一个
-        if "function" ~= type(modal_option["_enter"]) then
-          self:create_custom_modal_enter(modal_option)
+        -- 自定义模式的进入函数,如果没有则再生成一个
+        if "function" ~= type(custom_modal["_enter"]) then
+          self:create_custom_modal_enter(custom_modal)
         end
-        -- 无须每次都创建一个进入模式的函数
-        vim.defer_fn(modal_option["_enter"], self.options.enter_defer_time)
-      else
-        -- handle = self.handle_result.bypassandleave -- 让当前无效的输入放到序列中继续生效
-        handle = self.handle_result.leavemodal -- 继续生效虽然能快一点但也造成困惑，还是统一较好
+        -- 延迟触发进入响应按键的自定义模式
+        vim.defer_fn(custom_modal["_enter"], self.options.enter_defer_time)
+        break -- 已经找到一个可响应按键的自定义模式
       end
     end
   end
@@ -638,7 +728,7 @@ function M:get_root_modal(mode, lhs, opt)
 end
 
 ----------------------------------------------------------------------------------------------------
-function M:registry_default_custom()
+function M:registry_root_modal()
   -- 注册的默认模式,用于展示已经注册到仓库中的各个模式
   if "table" == type(self.options.keymap) then
     local keymap = self.options.keymap
@@ -651,7 +741,7 @@ end
 ----------------------------------------------------------------------------------------------------
 function M:setup(configure, opt)
   self:configure(configure, opt)
-  self:registry_default_custom()
+  self:registry_root_modal()
 
   if self.options.active == true or self.options.active == nil then
     -- 默认是立即开始按键监听
@@ -669,7 +759,6 @@ function M:simulate_keypath(keypath, hide_floatwin)
   end
   local original_floatwin_visible = self.options.floatwin_visible
   self.options.floatwin_visible = not (hide_floatwin == nil or hide_floatwin == true)
-  -- print(self.options.floatwin_visible, original_floatwin_visible)
   local keycode = vim.api.nvim_replace_termcodes(keypath, true, false, true)
   vim.api.nvim_feedkeys(keycode, self.options.simulate_mode, false)
   -- 恢复浮动窗口可视设置
