@@ -28,6 +28,10 @@ local function create_state(_modal)
       desc = "quit current buffer",
       handle = "<cmd>q<cr>",
     },
+    q = {
+      desc = ":quit",
+      handle = "<cmd>quit<cr>",
+    },
     s = {
       desc = "clear selection",
       handle = "<cmd>let @/=''<cr>",
@@ -37,6 +41,7 @@ local function create_state(_modal)
 end
 
 ----------------------------------------------------------------------------------------------------
+---@GenerateModalOption
 return function(modal)
   ---@type ModalOption
   return {

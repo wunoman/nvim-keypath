@@ -11,27 +11,23 @@ local function create_state(modal)
     b = {
       desc = "backup and delete selection",
       handle = function()
+        modal:feed_native_key([[:w! >> snip.txt<cr>gv"_x]])
+        return modal.handle_result.feedandleave
+      end,
+      condition = function()
         local mode = vim.api.nvim_get_mode().mode
-        if mode == "v" or mode == "V" then
-          modal:feed_native_key([[:w! >> snip.txt<cr>gv"_x]])
-          return modal.handle_result.feedandleave
-        else
-          vim.notify("no selection")
-          return modal.handle_result.leavemodal
-        end
+        return mode == "v" or mode == "V"
       end,
     },
     s = {
       desc = "backup selection",
       handle = function()
+        modal:feed_native_key([[:w! >> snip.txt<cr>]])
+        return modal.handle_result.feedandleave
+      end,
+      condition = function()
         local mode = vim.api.nvim_get_mode().mode
-        if mode == "v" or mode == "V" then
-          modal:feed_native_key([[:w! >> snip.txt<cr>]])
-          return modal.handle_result.feedandleave
-        else
-          vim.notify("no selection")
-          return modal.handle_result.leavemodal
-        end
+        return mode == "v" or mode == "V"
       end,
     },
   }
@@ -39,6 +35,7 @@ local function create_state(modal)
 end
 
 ----------------------------------------------------------------------------------------------------
+---@GenerateModalOption
 return function(modal)
   ---@type ModalOption
   return {

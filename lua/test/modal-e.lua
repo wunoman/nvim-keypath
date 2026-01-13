@@ -167,10 +167,6 @@ local function create_state(modal)
       desc = "path...",
       state = path, -- key name or table
     },
-    w = {
-      desc = "win pick",
-      handle = "<cmd>lua require('nvim-window').pick()<cr>",
-    },
     g = {
       desc = "test...",
       state = {
@@ -184,21 +180,22 @@ local function create_state(modal)
     },
   }
   -- 返回editor,需要在path外部定义,需要editor循环引用了path
-  ---@ModalHandler
-  path["-"] = {
-    desc = "../",
-    state = state,
-  }
+  -- ---@ModalHandler
+  -- path["-"] = {
+  --   desc = "../",
+  --   state = state,
+  -- }
   -- 返回editor,需要在movebuffer外部定义,需要editor循环引用了movebuffer
-  ---@ModalHandler
-  movebuffer["-"] = {
-    desc = "../",
-    state = state,
-  }
+  -- ---@ModalHandler
+  -- movebuffer["-"] = {
+  --   desc = "../",
+  --   state = state,
+  -- }
   return state
 end
 
 ----------------------------------------------------------------------------------------------------
+---@GenerateModalOption
 return function(modal)
   ---@type ModalOption
   return {
