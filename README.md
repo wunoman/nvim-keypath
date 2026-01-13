@@ -246,10 +246,15 @@ keypath
 允许实现更多的定制化功能
 
 - set_state 第一个参数是keypath插件本向，第二个参数是进行的ModalState（如果是进入的话，否则是nil）
+
   self:trigger_event("set_state", state)
+
 - show_which_key
+
   hintline = self:trigger_event("show_which_key", self, custom_modal, state, k, v)
+
 - is_custom_modal
+
   return not not self:trigger_event("is_custom_modal", modal_name)
 
 ## 历史
