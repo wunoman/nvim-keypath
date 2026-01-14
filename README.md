@@ -203,6 +203,50 @@ require("nvim-keypath")
     },
 ```
 
+#### 例子：窗口跳转选择
+如果你只有两个窗口，一个是nvim-tree，另一个是编辑窗口，在把ModalOption绑定在\<leader\>w后，按下\<leader\>ww则可以跳到非当前窗口的别一个窗口。
+
+如果只有一个窗口，则不会提供w这个节点功能。
+
+如果多于2个窗口，则启用窗口选择器nvim-window，再按下相应窗口的提示符即可跳转到该窗口。
+```
+    w = {
+      desc = "win pick",
+      -- handle = "<cmd>lua require('nvim-window').pick()<cr>",
+      handle = function(keypath)
+        -- 实现当只有2个窗口时直接跳到另一个窗口
+        local wins = {}
+        for _, id in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+          local conf = vim.api.nvim_win_get_config(id)
+
+          if conf.relative == "" then
+            table.insert(wins, id)
+          else
+            vim.api.nvim_win_close(id, false)
+          end
+        end
+        if #wins == 2 then
+          local current_win = vim.api.nvim_get_current_win()
+          print(vim.inspect(wins))
+          for _, win in ipairs(wins) do
+            if win ~= current_win then
+              vim.api.nvim_set_current_win(win)
+              return keypath.handle_result.discardedandleave
+            end
+          end
+        else
+          -- 如果超过2个窗口调用窗口选择器
+          require("nvim-window").pick()
+        end
+        return keypath.handle_result.leavemodal
+      end,
+      condition = function()
+        -- 如果只有一个窗口则不提供该功能
+        return 1 < #(vim.api.nvim_list_wins())
+      end,
+    },
+```
+
 ## 与 lualine 结合显示当前的自定义模式名称
 
 在配置 lualine 时把 keypath 的 component 添加到 lualine_b 中，使用 keypath 的get_status_component() 返回 component 配置
@@ -240,6 +284,22 @@ keypath
   })
   :registry("core.modal.modal-q") 
 ```
+## 调用keypath的具体指令功能
+如果你把功能都写在了keypath的ModalHandler的handle函数里，然后想用其他按键映射它，可以用simulate_keypath来调用它。例如
+```
+    nvim.kemap.set({ "n", "v" }, "gj", function()
+      -- 使用modal的功能,通过模拟按键触发对应的功能
+      local status_keypath, keypath = utils.require("nvim-keypath")
+      if
+        status_keypath
+        and "table" == type(keypath)
+        and "function" == type(keypath.simulate_keypath)
+      then
+        keypath:simulate_keypath("<leader>eh<tab>") -- ;是退出键要保证它没有被绑定
+      end
+    end, desc("prev"))
+```
+这里的普通模式下的gj将调用到keypath中的eh路径指向的具体功能，\<leader\>是开启，\<tab\>是退出
 
 ## 事件回调函数
 
